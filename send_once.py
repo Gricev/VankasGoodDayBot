@@ -3,7 +3,8 @@ import httpx
 import pytz
 import xml.etree.ElementTree as ET
 import os
-from datetime import datetime
+import feedparser
+from datetime import datetime, timezone, timedelta
 from telegram import Bot
 from telegram.error import TelegramError
 
@@ -80,6 +81,19 @@ async def get_weather():
     return "\n".join(lines)
 
 
+async def get_news():
+    feed = feedparser.parse("https://lenta.ru/rss/news")
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    items = []
+    for entry in feed.entries:
+        published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+        if published >= cutoff:
+            items.append(entry.title)
+        if len(items) == 10:
+            break
+    return items
+
+
 async def main():
     day_of_week = datetime.now(TIMEZONE).weekday()
     greeting = MESSAGES[day_of_week % len(MESSAGES)]
@@ -95,13 +109,21 @@ async def main():
         usd = cny = btc_usd = btc_rub = 0
         weather = "не удалось загрузить"
 
+    try:
+        news = await asyncio.to_thread(get_news)
+        news_text = "\n".join(f"  {i+1}. {title}" for i, title in enumerate(news))
+    except Exception as e:
+        print(f"Ошибка получения новостей: {e}")
+        news_text = "  не удалось загрузить"
+
     message = (
-        f"{greeting}\n\n"
+        # f"{greeting}\n\n"
         f"💰 Курсы (ЦБ РФ):\n"
         f"  💵 Доллар: {usd:.2f} ₽\n"
         f"  🇨🇳 Юань:  {cny:.2f} ₽\n"
         f"  ₿ Биткоин: ${btc_usd:,.0f}  ({btc_rub:,.0f} ₽)\n\n"
-        f"🌤 Погода в Краснодаре:\n{weather}"
+        f"🌤 Погода в Краснодаре:\n{weather}\n\n"
+        f"📰 Новости за 24 часа (Лента.ру):\n{news_text}"
     )
 
     bot = Bot(token=BOT_TOKEN)
