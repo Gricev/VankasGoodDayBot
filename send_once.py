@@ -81,7 +81,7 @@ async def get_weather():
     return "\n".join(lines)
 
 
-async def get_news():
+def get_news():
     feed = feedparser.parse("https://lenta.ru/rss/news")
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     items = []
