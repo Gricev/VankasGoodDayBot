@@ -1,0 +1,116 @@
+import asyncio
+import httpx
+import pytz
+import xml.etree.ElementTree as ET
+import os
+from datetime import datetime
+from telegram import Bot
+from telegram.error import TelegramError
+
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+CHAT_ID = int(os.environ["CHAT_ID"])
+TIMEZONE = pytz.timezone("Europe/Moscow")
+
+MESSAGES = [
+    "Доброе утро! Пусть этот день принесёт тебе только хорошее ☀️",
+    "С добрым утром! Желаю тебе прекрасного дня 🌸",
+    "Доброе утро! Улыбнись — день будет замечательным 😊",
+    "С добрым утром! Пусть всё идёт по плану и даже лучше 🌟",
+    "Доброе утро! Хорошего тебе дня и отличного настроения 💫",
+]
+
+WEATHER_CODES = {
+    0: "Ясно ☀️", 1: "Преим. ясно 🌤", 2: "Переменно ⛅", 3: "Пасмурно ☁️",
+    45: "Туман 🌫", 48: "Туман 🌫",
+    51: "Лёгкая морось 🌦", 53: "Морось 🌦", 55: "Сильная морось 🌧",
+    61: "Небольшой дождь 🌧", 63: "Дождь 🌧", 65: "Сильный дождь 🌧",
+    71: "Небольшой снег 🌨", 73: "Снег 🌨", 75: "Сильный снег ❄️",
+    77: "Снежная крупа 🌨",
+    80: "Ливень 🌦", 81: "Умеренный ливень 🌧", 82: "Сильный ливень ⛈",
+    85: "Снегопад 🌨", 86: "Сильный снегопад ❄️",
+    95: "Гроза ⛈", 96: "Гроза с градом ⛈", 99: "Гроза с сильным градом ⛈",
+}
+
+
+async def get_currency_rates():
+    async with httpx.AsyncClient() as client:
+        resp = await client.get("https://www.cbr.ru/scripts/XML_daily.asp", timeout=10)
+        root = ET.fromstring(resp.text)
+    rates = {}
+    for valute in root.findall("Valute"):
+        char_code = valute.find("CharCode").text
+        if char_code in ("USD", "CNY"):
+            value = float(valute.find("Value").text.replace(",", "."))
+            nominal = int(valute.find("Nominal").text)
+            rates[char_code] = value / nominal
+    return rates
+
+
+async def get_bitcoin_price(usd_rate: float):
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": "bitcoin", "vs_currencies": "usd"},
+            timeout=10,
+        )
+    btc_usd = resp.json()["bitcoin"]["usd"]
+    return btc_usd, btc_usd * usd_rate
+
+
+async def get_weather():
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": 45.0448,
+                "longitude": 38.9760,
+                "hourly": "temperature_2m,weathercode",
+                "timezone": "Europe/Moscow",
+                "forecast_days": 1,
+            },
+            timeout=10,
+        )
+    data = resp.json()["hourly"]
+    lines = []
+    for time_str, temp, code in zip(data["time"], data["temperature_2m"], data["weathercode"]):
+        hour = int(time_str[11:13])
+        if hour % 3 == 0:
+            desc = WEATHER_CODES.get(code, "—")
+            lines.append(f"  {time_str[11:16]}  {temp:+.0f}°C  {desc}")
+    return "\n".join(lines)
+
+
+async def main():
+    day_of_week = datetime.now(TIMEZONE).weekday()
+    greeting = MESSAGES[day_of_week % len(MESSAGES)]
+
+    try:
+        rates = await get_currency_rates()
+        usd = rates.get("USD", 0)
+        cny = rates.get("CNY", 0)
+        btc_usd, btc_rub = await get_bitcoin_price(usd)
+        weather = await get_weather()
+    except Exception as e:
+        print(f"Ошибка получения данных: {e}")
+        usd = cny = btc_usd = btc_rub = 0
+        weather = "не удалось загрузить"
+
+    message = (
+        f"{greeting}\n\n"
+        f"💰 Курсы (ЦБ РФ):\n"
+        f"  💵 Доллар: {usd:.2f} ₽\n"
+        f"  🇨🇳 Юань:  {cny:.2f} ₽\n"
+        f"  ₿ Биткоин: ${btc_usd:,.0f}  ({btc_rub:,.0f} ₽)\n\n"
+        f"🌤 Погода в Краснодаре:\n{weather}"
+    )
+
+    try:
+        bot = Bot(token=BOT_TOKEN)
+        await bot.send_message(chat_id=CHAT_ID, text=message)
+        print("Сообщение отправлено")
+    except TelegramError as e:
+        print(f"Ошибка при отправке: {e}")
+        raise
+
+
+asyncio.run(main())

@@ -1,0 +1,25 @@
+name: Доброе утро
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # 04:00 UTC = 07:00 Москва
+  workflow_dispatch:       # ручной запуск для теста
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install python-telegram-bot httpx pytz
+
+      - name: Отправить сообщение
+        run: python send_once.py
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
