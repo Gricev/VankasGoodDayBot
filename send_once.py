@@ -137,7 +137,7 @@ async def main():
         news_text = "  не удалось загрузить"
 
     message = (
-        f"{greeting}\n\n"
+        # f"{greeting}\n\n"
         f"💰 Курсы (ЦБ РФ):\n"
         f"  💵 Доллар: {usd:.2f} ₽\n"
         f"  🇨🇳 Юань:  {cny:.2f} ₽\n"
