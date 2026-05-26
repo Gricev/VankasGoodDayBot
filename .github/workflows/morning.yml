@@ -16,7 +16,7 @@ jobs:
           python-version: '3.11'
 
       - name: Установить зависимости
-        run: pip install python-telegram-bot httpx pytz feedparser
+        run: pip install python-telegram-bot httpx pytz
 
       - name: Отправить сообщение
         run: python send_once.py

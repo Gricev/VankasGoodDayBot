@@ -3,7 +3,7 @@ import httpx
 import pytz
 import xml.etree.ElementTree as ET
 import os
-import feedparser
+from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone, timedelta
 from telegram import Bot
 from telegram.error import TelegramError
@@ -81,14 +81,34 @@ async def get_weather():
     return "\n".join(lines)
 
 
-def get_news():
-    feed = feedparser.parse("https://lenta.ru/rss/news")
+async def get_news():
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://ria.ru/export/rss2/archive/index.xml",
+            headers=headers,
+            timeout=10,
+            follow_redirects=True,
+        )
+        resp.raise_for_status()
+    root = ET.fromstring(resp.content)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     items = []
-    for entry in feed.entries:
-        published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-        if published >= cutoff:
-            items.append(entry.title)
+    for item in root.findall(".//item"):
+        title_el = item.find("title")
+        pubdate_el = item.find("pubDate")
+        if title_el is None:
+            continue
+        if pubdate_el is not None:
+            try:
+                published = parsedate_to_datetime(pubdate_el.text)
+                if published.tzinfo is None:
+                    published = published.replace(tzinfo=timezone.utc)
+                if published < cutoff:
+                    continue
+            except Exception:
+                pass
+        items.append(title_el.text)
         if len(items) == 10:
             break
     return items
@@ -110,14 +130,14 @@ async def main():
         weather = "не удалось загрузить"
 
     try:
-        news = await asyncio.to_thread(get_news)
+        news = await get_news()
         news_text = "\n".join(f"  {i+1}. {title}" for i, title in enumerate(news))
     except Exception as e:
         print(f"Ошибка получения новостей: {e}")
         news_text = "  не удалось загрузить"
 
     message = (
-        # f"{greeting}\n\n"
+        f"{greeting}\n\n"
         f"💰 Курсы (ЦБ РФ):\n"
         f"  💵 Доллар: {usd:.2f} ₽\n"
         f"  🇨🇳 Юань:  {cny:.2f} ₽\n"
