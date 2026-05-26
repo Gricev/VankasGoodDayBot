@@ -8,7 +8,7 @@ from telegram import Bot
 from telegram.error import TelegramError
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHAT_ID = int(os.environ["CHAT_ID"])
+CHAT_IDS = [int(x.strip()) for x in os.environ["CHAT_ID"].split(",")]
 TIMEZONE = pytz.timezone("Europe/Moscow")
 
 MESSAGES = [
@@ -104,13 +104,13 @@ async def main():
         f"🌤 Погода в Краснодаре:\n{weather}"
     )
 
-    try:
-        bot = Bot(token=BOT_TOKEN)
-        await bot.send_message(chat_id=CHAT_ID, text=message)
-        print("Сообщение отправлено")
-    except TelegramError as e:
-        print(f"Ошибка при отправке: {e}")
-        raise
+    bot = Bot(token=BOT_TOKEN)
+    for chat_id in CHAT_IDS:
+        try:
+            await bot.send_message(chat_id=chat_id, text=message)
+            print(f"Отправлено: {chat_id}")
+        except TelegramError as e:
+            print(f"Ошибка {chat_id}: {e}")
 
 
 asyncio.run(main())
