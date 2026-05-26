@@ -131,7 +131,7 @@ async def main():
 
     try:
         news = await get_news()
-        news_text = "\n".join(f"  {i+1}. {title}" for i, title in enumerate(news))
+        news_text = "\n\n".join(f"  {i+1}. {title}" for i, title in enumerate(news))
     except Exception as e:
         print(f"Ошибка получения новостей: {e}")
         news_text = "  не удалось загрузить"
