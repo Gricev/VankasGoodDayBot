@@ -66,19 +66,24 @@ async def get_weather():
                 "latitude": 45.0448,
                 "longitude": 38.9760,
                 "hourly": "temperature_2m,weathercode",
+                "daily": "sunrise,sunset",
                 "timezone": "Europe/Moscow",
                 "forecast_days": 1,
             },
             timeout=10,
         )
-    data = resp.json()["hourly"]
+    data = resp.json()
+    hourly = data["hourly"]
+    daily = data["daily"]
+    sunrise = daily["sunrise"][0][11:16]
+    sunset = daily["sunset"][0][11:16]
     lines = []
-    for time_str, temp, code in zip(data["time"], data["temperature_2m"], data["weathercode"]):
+    for time_str, temp, code in zip(hourly["time"], hourly["temperature_2m"], hourly["weathercode"]):
         hour = int(time_str[11:13])
         if hour % 3 == 0:
             desc = WEATHER_CODES.get(code, "—")
             lines.append(f"  {time_str[11:16]}  {temp:+.0f}°C  {desc}")
-    return "\n".join(lines)
+    return "\n".join(lines), sunrise, sunset
 
 
 async def get_news():
@@ -123,11 +128,12 @@ async def main():
         usd = rates.get("USD", 0)
         cny = rates.get("CNY", 0)
         btc_usd, btc_rub = await get_bitcoin_price(usd)
-        weather = await get_weather()
+        weather, sunrise, sunset = await get_weather()
     except Exception as e:
         print(f"Ошибка получения данных: {e}")
         usd = cny = btc_usd = btc_rub = 0
         weather = "не удалось загрузить"
+        sunrise = sunset = "—"
 
     try:
         news = await get_news()
@@ -142,7 +148,8 @@ async def main():
         f"  💵 Доллар: {usd:.2f} ₽\n"
         f"  🇨🇳 Юань:  {cny:.2f} ₽\n"
         f"  ₿ Биткоин: ${btc_usd:,.0f}  ({btc_rub:,.0f} ₽)\n\n"
-        f"🌤 Погода в Краснодаре:\n{weather}\n\n"
+        f"🌤 Погода в Краснодаре:\n{weather}\n"
+        f"  🌅 Восход: {sunrise}   🌇 Закат: {sunset}\n\n"
         f"📰 Новости за 24 часа (Лента.ру):\n{news_text}"
     )
 
